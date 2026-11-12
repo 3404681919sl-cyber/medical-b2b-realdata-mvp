@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "source": {
+    "title": "Retail sales dataset of a pharmacy in Indonesia",
+    "doi": "10.17632/2ym7v78wtd.1",
+    "license": "CC BY 4.0",
+    "archive_sha256": "5b77caa777993e0b01b9dd714cfaefe3aecd9b2b4b9138d550fec43d4258ca94"
+  },
+  "files": {
+    "transactions.csv.gz": {
+      "sha256": "6390e6a837d940da9f5c6a2ac329edc9a279c602d3504d428bd3f1c45e91e340",
+      "size_bytes": 2579048,
+      "row_count": 399738
+    },
+    "products.csv.gz": {
+      "sha256": "d70a8aa512e41523923b7f0c4faef225a53270b6df96dc32d10c922ab9dd7a1c",
+      "size_bytes": 101283,
+      "row_count": 6878
+    }
+  }
+}

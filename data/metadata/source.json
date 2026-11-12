@@ -1,0 +1,24 @@
+{
+  "title": "Retail sales dataset of a pharmacy in Indonesia",
+  "author": "Rendra Gustriansyah",
+  "publisher": "Mendeley Data",
+  "doi": "10.17632/2ym7v78wtd.1",
+  "version": 1,
+  "published_date": "2022-02-14",
+  "license": "CC BY 4.0",
+  "source_page": "https://data.mendeley.com/datasets/2ym7v78wtd/1",
+  "source_file": "sales.zip",
+  "provider_file_size_bytes": 8560326,
+  "local_file_size_bytes": 8560326,
+  "provider_sha256": "5b77caa777993e0b01b9dd714cfaefe3aecd9b2b4b9138d550fec43d4258ca94",
+  "local_sha256": "5b77caa777993e0b01b9dd714cfaefe3aecd9b2b4b9138d550fec43d4258ca94",
+  "integrity_verified": true,
+  "retrieved_date": "2026-10-16",
+  "geography": "Indonesia",
+  "known_limitations": [
+    "Historical pharmacy data; not current China market data",
+    "The public archive does not provide live inventory, expiry batches, in-transit stock or supplier lead times",
+    "Business impact requires a separate real-world pilot"
+  ]
+}
+

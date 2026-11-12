@@ -1,0 +1,13 @@
+.venv/
+__pycache__/
+.pytest_cache/
+.pytest-*/
+*.py[cod]
+.streamlit/secrets.toml
+data/raw/*
+!data/raw/.gitkeep
+data/interim/*
+!data/interim/.gitkeep
+data/deploy/*.tmp
+exports/
+

@@ -1,0 +1,34 @@
+{
+  "transactions": {
+    "row_count": 399738,
+    "unique_receipts": 126954,
+    "unique_skus": 2043,
+    "date_min": "2015-01-01",
+    "date_max": "2015-12-31",
+    "missing_by_column": {
+      "receipt_id": 0,
+      "sale_date": 0,
+      "sku_id": 0,
+      "quantity": 0,
+      "unit_cost": 0,
+      "unit_price": 0
+    },
+    "exact_duplicate_rows": 391,
+    "invalid_sale_date_rows": 0,
+    "non_positive_quantity_rows": 268,
+    "price_below_cost_rows": 1302,
+    "orphan_sku_rows": 92
+  },
+  "products": {
+    "row_count": 6878,
+    "unique_skus": 6878,
+    "duplicate_sku_rows": 0,
+    "missing_by_column": {
+      "sku_id": 0,
+      "product_name": 2,
+      "sales_unit": 100,
+      "manufacturer_code": 7,
+      "list_price": 0
+    }
+  }
+}
