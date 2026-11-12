@@ -2,6 +2,10 @@
 
 一个以真实公开药店历史销售数据为基准、支持用户 Excel 导入的数据质量、销量洞察、需求回测与可选采购计划工具。
 
+[![Streamlit App](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://yaocai-zhixi.streamlit.app/)
+
+**在线体验：** [https://yaocai-zhixi.streamlit.app/](https://yaocai-zhixi.streamlit.app/)
+
 ## Evidence status
 
 - **Observed source:** Mendeley Data, *Retail sales dataset of a pharmacy in Indonesia*, DOI `10.17632/2ym7v78wtd.1`, CC BY 4.0.
@@ -18,6 +22,7 @@
 - Analysis layer: `399,079` rows after excluding only exact duplicates, non-positive quantities, invalid dates and empty SKU codes.
 - Automated verification: `36 passed`; import, analysis, candidate forecasting, deployment-data integrity, procurement, export and Streamlit startup are covered. All six Streamlit stages are exercised programmatically.
 - Forecast eligibility snapshot: `1,361 / 2,042` sold SKUs (`66.65%`) support the complete 21-week-history and 8-week-holdout comparison. Risk labels are non-exclusive.
+- Public deployment: Streamlit Community Cloud at `yaocai-zhixi.streamlit.app`, running the verified `main` branch entrypoint `app.py`.
 
 ## Local setup
 
