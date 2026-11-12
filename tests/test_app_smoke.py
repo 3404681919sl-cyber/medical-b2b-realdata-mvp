@@ -19,6 +19,7 @@ def test_forecast_pages_expose_manual_selection_and_bad_case_analysis():
     app = AppTest.from_file(PROJECT_ROOT / "app.py", default_timeout=30).run()
 
     assert "BadCase分析" in app.sidebar.radio[0].options
+    assert "智能问数" in app.sidebar.radio[0].options
 
     app.sidebar.radio[0].set_value("需求回测").run()
     assert not app.exception
@@ -30,4 +31,8 @@ def test_forecast_pages_expose_manual_selection_and_bad_case_analysis():
     app.sidebar.radio[0].set_value("BadCase分析").run()
     assert not app.exception
     assert app.header[0].value == "BadCase分析"
+
+    app.sidebar.radio[0].set_value("智能问数").run()
+    assert not app.exception
+    assert app.header[0].value == "智能问数"
 

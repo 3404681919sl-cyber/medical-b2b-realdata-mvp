@@ -8,6 +8,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
 
+from src.agent import execute_analysis_agent
 from src.analysis import classify_abc, summarize_skus
 from src.data_import import (
     prepare_analysis_transactions,
@@ -21,10 +22,13 @@ from src.forecasting import (
     build_sku_diagnostics,
     build_weekly_demand,
     chronological_holdout,
+    forecast_croston_sba,
     forecast_moving_average,
     forecast_naive,
     forecast_seasonal_naive,
+    normalize_candidate_parameter,
     recommend_forecast_candidate,
+    rolling_origin_backtest_candidates,
 )
 from src.procurement import calculate_procurement_plan
 
@@ -152,6 +156,7 @@ def render_sidebar(source: dict) -> str:
             "经营分析",
             "需求回测",
             "BadCase分析",
+            "智能问数",
             "采购计算",
             "导出证据",
         ],
@@ -328,17 +333,20 @@ def render_backtest(clean: pd.DataFrame, summary: pd.DataFrame) -> None:
     if len(weekly) < 21:
         st.warning("该商品历史周期不足21周，无法公平比较全部候选策略。")
         return
-    results = backtest_forecast_candidates(
+    results = rolling_origin_backtest_candidates(
         weekly,
-        holdout_periods=8,
+        fold_horizon=4,
+        folds=3,
         moving_windows=(4, 8, 12),
         seasonal_periods=(4, 13),
+        croston_alphas=(0.1, 0.2, 0.3),
     )
     recommended = recommend_forecast_candidate(results)
-    cols = st.columns(3)
-    cols[0].metric("训练周数", int(recommended["train_periods"]))
-    cols[1].metric("测试周数", int(recommended["test_periods"]))
-    cols[2].metric("自动推荐 WAPE", f"{recommended['wape']:.1%}")
+    cols = st.columns(4)
+    cols[0].metric("历史周数", len(weekly))
+    cols[1].metric("滚动折数", int(recommended["folds"]))
+    cols[2].metric("累计评估周", int(recommended["test_periods"]))
+    cols[3].metric("自动推荐 WAPE", f"{recommended['wape']:.1%}")
 
     labels = results.set_index("candidate_id")["model_label"].to_dict()
     candidate_ids = results["candidate_id"].tolist()
@@ -383,7 +391,7 @@ def render_backtest(clean: pd.DataFrame, summary: pd.DataFrame) -> None:
     )
     st.plotly_chart(figure, width="stretch")
     display = results[
-        ["candidate_id", "model_label", "parameter", "mae", "wape"]
+        ["candidate_id", "model_label", "parameter", "folds", "mae", "wape"]
     ].copy()
     display["is_recommended"] = display["candidate_id"].eq(recommended_id)
     display["wape"] = display["wape"].map(lambda value: f"{value:.1%}")
@@ -392,7 +400,8 @@ def render_backtest(clean: pd.DataFrame, summary: pd.DataFrame) -> None:
         {
             "candidate_id": str(row.candidate_id),
             "model_label": str(row.model_label),
-            "parameter": None if pd.isna(row.parameter) else int(row.parameter),
+            "parameter": normalize_candidate_parameter(row.parameter),
+            "folds": int(row.folds),
             "mae": float(row.mae),
             "wape": float(row.wape),
         }
@@ -402,8 +411,10 @@ def render_backtest(clean: pd.DataFrame, summary: pd.DataFrame) -> None:
         "sku_id": selected_sku,
         "history_start": weekly.index.min().date().isoformat(),
         "history_end": weekly.index.max().date().isoformat(),
-        "holdout_periods": 8,
-        "selection_rule": "minimum WAPE, then MAE, then candidate_id",
+        "evaluation_scheme": "3-fold expanding-window rolling origin",
+        "fold_horizon": 4,
+        "folds": 3,
+        "selection_rule": "minimum rolling WAPE, then MAE, then candidate_id",
         "automatic_recommendation": recommended_id,
         "manual_selection": selected_id,
         "candidates": candidate_records,
@@ -417,7 +428,7 @@ def render_backtest(clean: pd.DataFrame, summary: pd.DataFrame) -> None:
         mime="application/json",
     )
     st.caption(
-        "候选策略采用完整遍历而非二分搜索；低误差不代表已在当前门店验证。"
+        "候选策略采用三折扩展窗口回测与完整遍历；低误差不代表已在当前门店验证。"
     )
 
 
@@ -432,7 +443,58 @@ def forecast_selected_candidate(
         return forecast_moving_average(train, horizon, parameter)
     if candidate_id.startswith("seasonal_naive:"):
         return forecast_seasonal_naive(train, horizon, parameter)
+    if candidate_id.startswith("croston_sba:"):
+        return forecast_croston_sba(train, horizon, float(candidate["parameter"]))
     raise ValueError(f"Unknown forecast candidate: {candidate_id}")
+
+
+def render_analysis_agent(clean: pd.DataFrame, summary: pd.DataFrame) -> None:
+    st.header("智能问数")
+    st.caption("规则意图路由 · 真实工具调用 · 证据与边界同时返回")
+    st.markdown(
+        '<div class="boundary">当前助手不是自由生成的大模型：它只识别销售表现、需求预测、风险诊断和采购建议四类问题，并展示实际调用的分析工具。</div>',
+        unsafe_allow_html=True,
+    )
+    options = sku_options(summary)
+    selected_sku = st.selectbox(
+        "选择商品",
+        options,
+        format_func=lambda sku: sku_label(summary, sku),
+        key="agent_sku",
+    )
+    query = st.text_input(
+        "输入业务问题",
+        value="这个商品的需求预测是否稳定？",
+        help="示例：销售表现如何？需求预测是否稳定？有哪些异常风险？建议采购多少？",
+    )
+    if not st.button("执行分析", type="primary"):
+        st.info("助手会保留意图、工具、参数、证据和拒绝原因，便于复盘。")
+        return
+
+    summary_row = summary.loc[summary["sku_id"] == selected_sku].iloc[0].to_dict()
+    weekly = build_weekly_demand(clean, selected_sku)
+    try:
+        result = execute_analysis_agent(
+            query,
+            sku_id=selected_sku,
+            sku_summary=summary_row,
+            weekly_demand=weekly,
+        )
+    except ValueError as error:
+        st.error(f"当前历史不足以执行该分析：{error}")
+        return
+
+    st.success(str(result["answer"]))
+    col1, col2 = st.columns(2)
+    with col1:
+        st.subheader("工具调用轨迹")
+        st.json(result["tool_calls"])
+    with col2:
+        st.subheader("结构化证据")
+        st.json(result.get("evidence", {}))
+    if result.get("missing_inputs"):
+        st.warning("仍需输入：" + "、".join(result["missing_inputs"]))
+    st.caption("；".join(result["boundaries"]))
 
 
 def render_bad_cases(clean: pd.DataFrame, summary: pd.DataFrame) -> None:
@@ -503,6 +565,7 @@ def render_procurement(clean: pd.DataFrame, summary: pd.DataFrame) -> None:
         holdout_periods=8,
         moving_windows=(4, 8, 12),
         seasonal_periods=(4, 13),
+        croston_alphas=(0.1, 0.2, 0.3),
     )
     best = recommend_forecast_candidate(candidates)
     forecast_demand = float(
@@ -595,6 +658,8 @@ def main() -> None:
         render_backtest(clean, summary)
     elif section == "BadCase分析":
         render_bad_cases(clean, summary)
+    elif section == "智能问数":
+        render_analysis_agent(clean, summary)
     elif section == "采购计算":
         render_procurement(clean, summary)
     else:

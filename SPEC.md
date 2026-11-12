@@ -20,6 +20,8 @@
 - 作为采购人员，我能查看商品销售趋势、ABC 分类和异常风险。
 - 作为采购人员，我能看到需求预测在历史测试集上的误差，而不是只看到未来预测值。
 - 作为采购人员，我能比较朴素、移动平均和季节性朴素策略，保留自动推荐与人工选择的差异。
+- 作为采购人员，我能通过多折滚动回测比较普通与间歇需求策略，而不是依赖单次留出结果。
+- 作为采购人员，我能用自然语言提出销售、预测、风险和采购问题，并看到意图、工具调用、证据与拒绝原因。
 - 作为采购人员，我能看到哪些 SKU 因历史不足、测试期零需求、稀疏或高波动而需要谨慎解释。
 - 作为采购人员，我只有在填写当前库存、在途、提前期、安全库存和最小采购量后才会得到采购建议。
 - 作为面试官，我能复现数据来源、处理步骤、指标口径与结果导出。
@@ -144,6 +146,9 @@ def calculate_reorder_quantity(
 10. UI and README display the data provenance and product limitations prominently.
 11. Candidate selection records WAPE, MAE, the deterministic recommendation rule and any manual override.
 12. BadCase coverage is measured by SKU and never treats zero sales as proof of stockout.
+13. Forecast selection aggregates three expanding-window folds and includes a Croston-SBA intermittent-demand baseline.
+14. The analysis assistant records a deterministic intent and named tool trace for every supported question.
+15. The assistant refuses to produce procurement quantities when real inventory inputs are absent.
 
 ## Open Questions
 

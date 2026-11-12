@@ -12,7 +12,7 @@
 - **What the source supports:** sales-data quality checks, product sales analysis and historical demand backtesting.
 - **What the source does not prove:** current Chinese pharmacy demand, live inventory, expiry status, supplier performance or business impact.
 - **Procurement boundary:** a recommendation is generated only after the user supplies current stock and purchasing parameters.
-- **AI boundary:** the current MVP uses auditable statistical baselines and deterministic rules. It does not disguise an LLM-written narrative as a validated prediction.
+- **AI boundary:** the current MVP uses auditable statistical baselines and a deterministic intent router with named tool traces. It does not disguise rule routing or an LLM-written narrative as a validated prediction.
 
 ## Verified local snapshot
 
@@ -20,7 +20,7 @@
 - Transactions: `399,738` rows, `126,954` receipts and `2,043` sold SKUs, covering 2015-01-01 through 2015-12-31.
 - Product master: `6,878` unique SKUs.
 - Analysis layer: `399,079` rows after excluding only exact duplicates, non-positive quantities, invalid dates and empty SKU codes.
-- Automated verification: `36 passed`; import, analysis, candidate forecasting, deployment-data integrity, procurement, export and Streamlit startup are covered. All six Streamlit stages are exercised programmatically.
+- Automated verification: `45 passed`; import, analysis, rolling-origin forecasting, intermittent-demand baselines, auditable intent routing, deployment-data integrity, procurement, export and Streamlit startup are covered. All seven Streamlit stages are exercised programmatically.
 - Forecast eligibility snapshot: `1,361 / 2,042` sold SKUs (`66.65%`) support the complete 21-week-history and 8-week-holdout comparison. Risk labels are non-exclusive.
 - Public deployment: Streamlit Community Cloud at `yaocai-zhixi.streamlit.app`, running the verified `main` branch entrypoint `app.py`.
 
@@ -40,7 +40,7 @@ Then open `http://localhost:8501`. The extraction command expects the verified S
 ## Streamlit Community Cloud deployment
 
 1. Run `scripts/build_deploy_bundle.py` and commit `data/deploy/` with the application code. Raw and interim source files remain excluded from Git.
-2. Push the repository to GitHub, then create a Streamlit Community Cloud app with `app.py` as the entrypoint and Python 3.12 as the runtime.
+2. Push the repository to GitHub, then create a Streamlit Community Cloud app with `app.py` as the entrypoint. The verified public deployment currently uses Python 3.14.
 3. The application prefers the compressed deployment bundle, verifies each file against `data/deploy/manifest.json`, and falls back to local interim CSV files only when no deployment artifact exists.
 4. Install production dependencies from the exactly pinned `requirements.txt`; use `requirements-dev.txt` only for local development and tests.
 
@@ -54,6 +54,7 @@ The deployment bundle contains historical product and transaction facts from the
 - `docs/ui-design.md`: interface design rationale.
 - `docs/data-quality-report.md`: reproducible full-source quality observations.
 - `docs/forecast-model-selection.md`: candidate sweep, recommendation rule, coverage and BadCase definitions.
+- `docs/data-source-candidates.md`: verified external-data candidates, licensing gates and adoption decision.
 
 ## Data handling
 

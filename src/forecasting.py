@@ -7,6 +7,14 @@ import math
 import pandas as pd
 
 
+def normalize_candidate_parameter(value: object) -> int | float | None:
+    """Convert pandas candidate parameters to JSON-safe native numbers."""
+    if pd.isna(value):
+        return None
+    number = float(value)
+    return int(number) if number.is_integer() else number
+
+
 def forecast_naive(train: pd.Series, horizon: int) -> pd.Series:
     """Repeat the latest observed demand for every forecast period."""
     if train.empty:
@@ -33,11 +41,43 @@ def forecast_seasonal_naive(
     )
 
 
+def forecast_croston_sba(
+    train: pd.Series, horizon: int, alpha: float = 0.2
+) -> pd.Series:
+    """Forecast intermittent demand with the bias-adjusted Croston method."""
+    if train.empty:
+        raise ValueError("Croston-SBA forecast requires at least one training period")
+    if horizon <= 0:
+        raise ValueError("Forecast horizon must be greater than zero")
+    if not 0 < alpha <= 1:
+        raise ValueError("alpha must be greater than zero and at most one")
+    values = train.astype(float).reset_index(drop=True)
+    if values.lt(0).any():
+        raise ValueError("Croston-SBA requires non-negative demand")
+    positive_positions = values.index[values.gt(0)].tolist()
+    if not positive_positions:
+        return pd.Series([0.0] * horizon, dtype="float64")
+
+    first_position = positive_positions[0]
+    demand_size = float(values.iloc[first_position])
+    demand_interval = float(first_position + 1)
+    previous_position = first_position
+    for position in positive_positions[1:]:
+        observed_interval = float(position - previous_position)
+        demand_size += alpha * (float(values.iloc[position]) - demand_size)
+        demand_interval += alpha * (observed_interval - demand_interval)
+        previous_position = position
+
+    forecast = (1.0 - alpha / 2.0) * demand_size / demand_interval
+    return pd.Series([forecast] * horizon, dtype="float64")
+
+
 def backtest_forecast_candidates(
     series: pd.Series,
     holdout_periods: int,
     moving_windows: tuple[int, ...],
     seasonal_periods: tuple[int, ...],
+    croston_alphas: tuple[float, ...] = (),
 ) -> pd.DataFrame:
     """Evaluate auditable baseline candidates on one chronological holdout."""
     train, test = chronological_holdout(series, holdout_periods)
@@ -66,6 +106,16 @@ def backtest_forecast_candidates(
                 forecast_seasonal_naive(train, len(test), period),
             )
         )
+    for alpha in croston_alphas:
+        alpha_label = f"{alpha:g}"
+        candidates.append(
+            (
+                f"croston_sba:{alpha_label}",
+                f"Croston-SBA（α={alpha_label}）",
+                alpha,
+                forecast_croston_sba(train, len(test), alpha),
+            )
+        )
 
     for candidate_id, label, parameter, predicted in candidates:
         rows.append(
@@ -77,6 +127,70 @@ def backtest_forecast_candidates(
                 "wape": weighted_absolute_percentage_error(test, predicted),
                 "train_periods": len(train),
                 "test_periods": len(test),
+            }
+        )
+    return pd.DataFrame(rows)
+
+
+def rolling_origin_backtest_candidates(
+    series: pd.Series,
+    fold_horizon: int,
+    folds: int,
+    moving_windows: tuple[int, ...],
+    seasonal_periods: tuple[int, ...],
+    croston_alphas: tuple[float, ...] = (),
+) -> pd.DataFrame:
+    """Aggregate candidate errors over expanding-window chronological folds."""
+    ordered = series.sort_index().astype(float)
+    if fold_horizon <= 0 or folds <= 0:
+        raise ValueError("fold_horizon and folds must be greater than zero")
+    if len(ordered) <= fold_horizon * folds:
+        raise ValueError("History is too short for the requested rolling folds")
+
+    fold_rows: list[dict[str, object]] = []
+    for fold_index in range(folds):
+        evaluation_end = len(ordered) - fold_horizon * (folds - fold_index - 1)
+        fold_series = ordered.iloc[:evaluation_end]
+        actual = fold_series.iloc[-fold_horizon:]
+        results = backtest_forecast_candidates(
+            fold_series,
+            holdout_periods=fold_horizon,
+            moving_windows=moving_windows,
+            seasonal_periods=seasonal_periods,
+            croston_alphas=croston_alphas,
+        )
+        for row in results.itertuples(index=False):
+            fold_rows.append(
+                {
+                    "candidate_id": row.candidate_id,
+                    "model_label": row.model_label,
+                    "parameter": row.parameter,
+                    "absolute_error_sum": float(row.mae) * int(row.test_periods),
+                    "actual_abs_sum": float(actual.abs().sum()),
+                    "train_periods": int(row.train_periods),
+                    "test_periods": int(row.test_periods),
+                }
+            )
+
+    fold_table = pd.DataFrame(fold_rows)
+    rows: list[dict[str, object]] = []
+    for candidate_id, group in fold_table.groupby("candidate_id", sort=False):
+        if len(group) != folds:
+            continue
+        error_sum = float(group["absolute_error_sum"].sum())
+        actual_sum = float(group["actual_abs_sum"].sum())
+        test_periods = int(group["test_periods"].sum())
+        rows.append(
+            {
+                "candidate_id": candidate_id,
+                "model_label": group["model_label"].iloc[0],
+                "parameter": group["parameter"].iloc[0],
+                "mae": error_sum / test_periods,
+                "wape": error_sum / actual_sum if actual_sum else math.nan,
+                "folds": folds,
+                "train_periods_min": int(group["train_periods"].min()),
+                "train_periods_max": int(group["train_periods"].max()),
+                "test_periods": test_periods,
             }
         )
     return pd.DataFrame(rows)

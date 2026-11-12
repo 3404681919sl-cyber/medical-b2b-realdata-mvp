@@ -9,11 +9,14 @@ from src.forecasting import (
     build_weekly_demand,
     chronological_holdout,
     diagnose_demand_series,
+    forecast_croston_sba,
     forecast_naive,
     forecast_seasonal_naive,
     forecast_moving_average,
     mean_absolute_error,
+    normalize_candidate_parameter,
     recommend_forecast_candidate,
+    rolling_origin_backtest_candidates,
     weighted_absolute_percentage_error,
 )
 
@@ -57,6 +60,23 @@ def test_forecast_seasonal_naive_cycles_the_latest_complete_season():
     result = forecast_seasonal_naive(train, horizon=3, seasonal_period=2)
 
     assert result.tolist() == [3.0, 4.0, 3.0]
+
+
+def test_croston_sba_updates_demand_size_and_interval_for_intermittent_series():
+    """Catches intermittent demand being reduced to a latest-value forecast."""
+    train = pd.Series([0.0, 0.0, 4.0, 0.0, 0.0, 0.0, 8.0, 0.0])
+
+    result = forecast_croston_sba(train, horizon=3, alpha=0.2)
+
+    assert result.round(4).tolist() == [1.35, 1.35, 1.35]
+
+
+def test_croston_sba_returns_zero_when_no_positive_demand_was_observed():
+    train = pd.Series([0.0, 0.0, 0.0])
+
+    result = forecast_croston_sba(train, horizon=2, alpha=0.2)
+
+    assert result.tolist() == [0.0, 0.0]
 
 
 def test_forecast_metrics_use_hand_calculated_errors():
@@ -131,6 +151,46 @@ def test_candidate_sweep_compares_naive_moving_and_seasonal_on_one_holdout():
     assert seasonal["wape"] == 0.0
 
 
+def test_candidate_sweep_can_include_croston_sba_without_hiding_its_alpha():
+    series = pd.Series(
+        [0.0, 0.0, 4.0, 0.0, 0.0, 8.0, 0.0, 0.0, 4.0, 0.0],
+        index=pd.date_range("2026-01-04", periods=10, freq="W-SUN"),
+    )
+
+    result = backtest_forecast_candidates(
+        series,
+        holdout_periods=2,
+        moving_windows=(),
+        seasonal_periods=(),
+        croston_alphas=(0.2,),
+    )
+
+    croston = result.set_index("candidate_id").loc["croston_sba:0.2"]
+    assert croston["model_label"] == "Croston-SBA（α=0.2）"
+    assert croston["parameter"] == 0.2
+
+
+def test_rolling_origin_backtest_aggregates_same_candidate_over_three_folds():
+    """Catches a recommendation depending on only one favorable holdout window."""
+    series = pd.Series(
+        [1.0, 10.0] * 10,
+        index=pd.date_range("2026-01-04", periods=20, freq="W-SUN"),
+    )
+
+    result = rolling_origin_backtest_candidates(
+        series,
+        fold_horizon=2,
+        folds=3,
+        moving_windows=(2,),
+        seasonal_periods=(2,),
+        croston_alphas=(0.2,),
+    ).set_index("candidate_id")
+
+    assert result.loc["seasonal_naive:2", "folds"] == 3
+    assert result.loc["seasonal_naive:2", "mae"] == 0.0
+    assert result.loc["seasonal_naive:2", "wape"] == 0.0
+
+
 def test_recommendation_uses_lowest_wape_and_preserves_candidate_row():
     """Catches automatic selection ignoring the auditable candidate table."""
     candidates = pd.DataFrame(
@@ -145,6 +205,12 @@ def test_recommendation_uses_lowest_wape_and_preserves_candidate_row():
 
     assert result["candidate_id"] == "seasonal_naive:4"
     assert result["wape"] == 0.15
+
+
+def test_candidate_parameter_serialization_preserves_fractional_alpha():
+    assert normalize_candidate_parameter(4.0) == 4
+    assert normalize_candidate_parameter(0.2) == 0.2
+    assert normalize_candidate_parameter(float("nan")) is None
 
 
 def test_diagnostics_separate_ineligible_history_from_risk_warnings():
